@@ -1,0 +1,501 @@
+4.1 Write a PL/SQL block to find the maximum salary of the staff in the given department.
+Note: Department code should be passed as parameter to the cursor.
+
+CREATE OR REPLACE PROCEDURE max_sal IS
+
+sal staff_masters.staff_sal%TYPE;
+code staff_masters.dept_code%TYPE;
+
+CURSOR info(dcode department_masters.dept_code%TYPE)
+ IS
+select max(staff_sal) 
+from staff_masters
+where dept_code=dcode;
+
+
+BEGIN
+code=&deptcode;
+open info(code);
+loop
+fetch info INTO sal,code;
+exit when info%NOTFOUND;
+dbms_ouptut.put_line('salary: ' || sal);
+end loop;
+close info;
+end;
+
+4.2 Write a function to compute age. The function should accept a date and return age in
+years.
+
+CREATE OR REPLACE function dat(p date) return number IS
+ age number(3);
+BEGIN
+select (round(sysdate-p)/365) into age FROM DUAL ;
+return age;
+END;
+
+SELECT dat('25-MAY-96') FROM DUAL;
+
+
+
+4.3 Write a procedure that accept staff code and update staff name to Upper case. If the
+staff name is null raise a user defined exception.
+
+create or replace procedure staffproc 
+(code staff_masters.staff_code%TYPE) IS
+
+staff_not_found EXCEPTION;
+temp number(2);
+
+BEGIN
+select count(*) into temp from staff_masters 
+where staff_code=code;
+if temp=0 then
+	raise staff_not_found; 
+end if;
+update staff_masters set staff_name=UPPER(staff_name)
+where staff_code=code;
+
+EXCEPTION
+when staff_not_found then
+dbms_output.put_line('no record');
+when others then
+dbms_output.put_line('contact dba');
+
+end;
+/
+
+
+
+declare
+code staff_masters.staff_code%TYPE:=&no;
+begin
+staffproc(code);
+end;
+/
+
+4.4 Write a procedure to find the manager of a staff. Procedure should return the
+following – Staff_Code, Staff_Name, Dept_Code and Manager Name.
+
+create or replace procedure details
+(scode staff_masters.staff_code%TYPE) 
+IS
+
+staff_not_found EXCEPTION;
+temp number(2);
+name staff_masters.staff_name%TYPE;
+dcode staff_masters.dept_code%TYPE;
+mgr staff_masters.staff_name%TYPE;
+code staff_masters.staff_code%TYPE;
+
+BEGIN
+select count(*) into temp from staff_masters 
+where staff_code=scode;
+if temp=0 then
+	raise staff_not_found; 
+end if;
+
+select s.staff_code,s.staff_name,s.dept_code,m.mgr_code
+into code,name,dcode,mgr
+from staff_masters s, staff_masters m
+where m.mgr_code=s.staff_code
+and s.dept_code=scode;
+
+DBMS_OUTPUT.PUT_LINE(code|| ' '||name||' '||dcode||' '||mgr);
+
+EXCEPTION
+when staff_not_found then
+dbms_output.put_line('no record');
+when others then
+dbms_output.put_line('contact dba');
+
+
+END;
+
+
+
+declare
+scode staff_masters.staff_code%TYPE:=&no;
+begin
+details(scode);
+end;
+
+
+4.5 Write a function to compute the following. Function should take Staff_Code and
+return the cost to company.
+DA = 15% Salary, HRA= 20% of Salary, TA= 8% of Salary.
+Special Allowance will be decided based on the service in the company.
+< 1 Year Nil
+>=1 Year< 2 Year 10% of Salary
+>=2 Year< 4 Year 20% of Salary
+>4 Year 30% of Salary
+
+
+create or replace function sal(v_staff_code staff_masters.staff_code%TYPE) return number is
+cost number;
+v_staff_sal staff_masters.staff_sal%TYPE;
+v_hiredate  staff_masters.hiredate%TYPE;
+cursor c1 is
+select staff_sal,hiredate from staff_masters where staff_code=v_staff_code;
+begin
+open c1;
+FETCH  c1 INTO v_staff_sal,v_hiredate;
+while c1%FOUND
+LOOP
+IF(round((sysdate-v_hiredate)/365)<1) THEN
+return(v_staff_sal-(v_staff_sal*0.43)+0);
+ELSIF(((round((sysdate-v_hiredate)/365))>=1)AND ((round((sysdate-v_hiredate)/365))<2)) THEN
+return(v_staff_sal-(v_staff_sal*0.43)+(v_staff_sal*0.1));
+ELSIF(((round((sysdate-v_hiredate)/365))>=2)AND ((round((sysdate-v_hiredate)/365))<4)) THEN
+return(v_staff_sal-(v_staff_sal*0.43)+(v_staff_sal*0.2));
+ELSE
+return(v_staff_sal-(v_staff_sal*0.43)+(v_staff_sal*0.3));
+END IF;
+FETCH  c1 INTO v_staff_sal,v_hiredate;
+END LOOP;
+CLOSE C1;
+END sal;
+
+
+declare
+ v_code staff_masters.staff_code%type;
+ v_cost number;
+begin
+ v_code :=&staff_code;
+ v_cost := sal(v_code);
+dbms_output.put_line(v_cost);
+end;
+
+
+4.6 Write a procedure that displays the following information of all staff
+Staff_Name Department Name Designation Salary Status
+Note: - Status will be (Greater, Lesser or Equal) respective to average salary of their own
+department. Display an error message Staff_Master table is empty if there is no matching
+record.
+
+create or replace procedure info 
+(code staff_masters.staff_code%TYPE)
+
+name staff_masters.staff_name%TYPE;
+designname designation_masters.design_name%TYPE;
+deptcode staff_masters.dept_code%TYPE;
+designcode staff_masters.deisgn_code%TYPE;
+sal staff_masters.staff_sal%TYPE;
+avgsal number(10,2);
+temp number(2);
+
+IS
+staff_not_found EXCEPTION;
+
+CURSOR infocursor IS
+select a.staff_name,a.dept_code,b.design_name,
+a.staff_sal,avg(staff_sal)
+from staff_masters a, designation_masters b
+where a.design_code=b.design_code;
+
+
+BEGIN
+OPEN infocursor;
+select count(*) into temp from staff_masters 
+where staff_name=name;
+if temp=0 then
+	raise staff_not_found; 
+end if;
+
+loop
+fetch infocursor into name,deptcode,
+designname,sal,avgsal
+exit when infocursor%NOTFOUND
+if(sal=avgsal) then
+dbms_output.put_line('details are :'|| name||deptcode||designname||sal||'equal');
+
+elsif(sal>avgsal) then
+dbms_output.put_line('details are :'|| name||deptcode||designname||sal||'greater');
+
+else
+dbms_output.put_line('details are :'|| name||deptcode||designname||sal||'lesser');
+
+end if;
+end loop;
+CLOSE infocursor;
+
+EXCEPTION
+
+when staff_not_found then
+dbms_output.put_line('no record');
+when others then
+dbms_output.put_line('contact dba');\
+
+END;
+/
+
+
+
+BEGIN
+INFO;
+END;
+/
+
+4.7 Write a procedure that accept Staff_Code and update the salary and store the old
+salary details in Staff_Master_Back (Staff_Master_Back has the same structure without
+any constraint) table.
+Exp < 2 then no Update
+Exp > 2 and < 5 then 20% of salary
+Exp > 5 then 25% of salary
+
+
+create or replace procedure staffinfo is
+v_staff_sal staff_masters.staff_sal%TYPE;
+v_hiredate  staff_masters.hiredate%TYPE;
+v_staff_code staff_masters.staff_code%TYPE;
+cursor c1 is
+select staff_sal,hiredate from staff_masters where staff_code=&v_staff_code;
+begin
+open c1;
+fetch c1 into v_staff_sal,v_hiredate;
+while c1%found
+LOOP
+IF(round((sysdate-v_hiredate)/365)<2) THEN
+DBMS_OUTPUT.PUT_LINE(v_staff_sal+0);
+insert into staff_master_back(staff_sal) values(v_staff_sal);
+ELSIF(((round((sysdate-v_hiredate)/365))>2)AND ((round((sysdate-v_hiredate)/365))<5)) THEN
+DBMS_OUTPUT.PUT_LINE(v_staff_sal+(v_staff_sal*0.2));
+insert into staff_master_back(staff_sal) values(v_staff_sal);
+ELSE
+DBMS_OUTPUT.PUT_LINE(v_staff_sal+(v_staff_sal*0.25));
+insert into staff_master_back(staff_sal) values(v_staff_sal);
+END IF;
+FETCH c1 INTO v_staff_sal,v_hiredate;
+END lOOP;
+close c1;
+END staffinfo;
+
+
+
+begin
+staffinfo;
+end;
+ /
+
+
+
+4.8 Create a procedure that accepts the book code as parameter from the user. Display
+the details of the students/staff that have borrowed that book and has not returned the
+same. The following details should be displayed
+Student/Staff Code Student/Staff Name Issue Date Designation Expected Ret_Date
+
+
+ create or replace procedure book_details(bcode book_transactions.book_code%TYPE) AS
+   v_name varchar2(30);
+   v_scode number;
+   v_code number;
+   v_stcode number;
+   v_idate date;
+   v_design_name designation_masters.design_name%TYPE;
+   v_retdate date;
+   v_actual  date;
+   cursor c1 is
+   select
+   staff_code,student_code,book_issue_date,book_expected_return_date,book_code,book_actual_return_date
+   FROM book_transactions
+   WHERE book_code=bcode;
+   BEGIN
+   OPEN c1;
+   LOOP
+   FETCH c1 into v_scode,v_stcode,v_idate,v_retdate,v_code,v_actual;
+   EXIT WHEN c1%NOTFOUND;
+   IF v_stcode IS NULL THEN
+   IF v_actual Is NULL THEN
+   SELECT staff_name into v_name FROM staff_masters WHERE staff_code=v_scode;
+   SELECT design_name into v_design_name FROM designation_masters d,staff_masters s WHERE s.design_code=d.design_code
+   AND staff_code=v_scode;
+   DBMS_OUTPUT.PUT_LINE(v_scode||' '||v_name||' '||v_idate||' '||v_design_name||' '||v_retdate);
+   ELSE
+   DBMS_OUTPUT.PUT_LINE('Book has been returned by'||v_scode);
+   END IF;
+   ELSIF  v_scode IS NULL THEN
+   IF v_actual IS NULL THEN
+   SELECT student_name into v_name FROM student_masters WHERE student_code=v_stcode;
+   v_design_name :=NULL;
+   DBMS_OUTPUT.PUT_LINE(v_stcode||' '||v_name||' '||v_idate||' '||v_design_name||' '||v_retdate);
+   ELSE
+   DBMS_OUTPUT.PUT_LINE('Book has been returned by'||v_stcode);
+   END IF;
+   END IF;
+   END LOOP;
+   CLOSE c1;
+   EXCEPTION
+   WHEN NO_DATA_FOUND THEN
+   DBMS_OUTPUT.PUT_LINE('Invalid data found');
+/
+
+
+4.9 Write a package which will contain a procedure and a function.
+Function: This function will return years of experience for a staff. This function will take
+the hiredate of the staff as an input parameter. The output will be rounded to the nearest
+year (1.4 year will be considered as 1 year and 1.5 year will be considered as 2 year).
+Procedure: Capture the value returned by the above function to calculate the additional
+allowance for the staff based on the experience.
+Additional Allowance = Year of experience x 3000
+Calculate the additional allowance and store Staff_Code, Date of Joining, and Experience
+in years and additional allowance in Staff_Allowance table.
+
+
+create table staff_allo
+(scode number(10),
+doj date,
+exp number(3),
+allowance number(10));
+
+create or replace package pack is
+function fexp  (hdate staff_masters.hiredate%TYPE)
+return number;
+procedure pallow (expr number, 
+scode staff_masters.staff_code%TYPE);
+
+allowance number(8);
+doj date;
+
+end pack;
+
+create or replace package body pack is
+function fexp is (hdate staff_masters.hiredate%TYPE)
+return number
+is exp number(8);
+begin
+exp := round(months_between((sysdate-hiredate)/12));
+return exp;
+end fexp;
+
+
+procedure pallow is (expr number(8), 
+scode staff_masters.staff_code%TYPE)
+is begin
+allowance:= exp*3000;
+select hiredate into doj from staff_masters
+where dept_code=scode;
+
+insert into staff_allo(scode,doj,exp,allowance);
+end pallow;
+end pack;
+
+
+
+
+Declare 
+    d STAFF_MASTERS.HIREDATE%type;
+    code STAFF_MASTERS.staff_code%type;
+Begin
+    code:=&code;
+    select hiredate into d from staff_masters where staff_code=code;
+    pack.fexp(pac.pallow(d),code);
+End;
+
+
+4.10 Write a procedure to insert details into Book_Transaction table. Procedure should
+accept the book code and staff/student code. Date of issue is current date and the
+expected return date should be 10 days from the current date. If the expected return date
+falls on Saturday or Sunday, then it should be the next working day.
+
+create or replace procedure book(bookcode in BOOK_MASTERS.BOOK_CODE%type,code number) is
+temp varchar2(20);
+dat date;
+BEGIN
+dat:=sysdate + INTERVAL '10' DAY;
+temp:=to_char(sysdate + INTERVAL '10' DAY,'D');
+if temp=7 then
+dat:=dat+INTERVAL '2' DAY;
+elsif temp=1 then
+dat:=dat+INTERVAL '1' DAY;
+End if;
+temp:=to_char(dat,'DAY');
+insert into BOOK_TRANSACTIONS values (bookcode,null,code,sysdate,dat,null);
+End book;
+
+execute book(10000006,100001);
+
+
+4.11 Write a function named ‘get_total_records’, to pass the table name as a parameter,
+and get back the number of records that are contained in the table. Test your function
+with multiple tables.
+
+
+create or replace function totalrec(tname in varchar2)
+return number is
+rec number(10);
+begin 
+select num_rows into rec from user_tables
+where table_name=upper(tname);
+return rec;
+end;
+
+
+Declare
+    table_name varchar2(20);
+    rec number(5);
+Begin 
+    table_name:='&x';
+    rec:=totalrec(table_name);
+    DBMS_OUTPUT.PUT_LINE('Total no of records are: '||rec);
+End;
+
+
+4.13 The following procedure attempts to delete data from table passed as parameter.This
+procedure has compilation errors. Identify and correct the problem.
+
+ CREATE or REPLACE PROCEDURE gettable(name in varchar2) AS  
+ BEGIN 
+ Execute Immediate 'DELETE FROM ' || name; 
+ END; 
+execute gettable('temp');
+ 
+
+4.14 Write a procedure which prints the following report using procedure:
+The procedure should take deptno as user input and appropriately print the emp details.
+Also display :
+Number of Employees,Total Salary,Maximum Salary,Average Salary
+
+create or replace procedure report(dept in EMP.DEPTNO%type) is
+Name EMP.ENAME%type;
+job EMP.JOB%type;
+sal EMP.SAL%type;
+comm EMP.COMM%type;
+cursor cur is select ENAME,JOB,SAL,COMM from emp where deptno=dept;
+Begin
+open cur;
+LOOP
+    fetch cur into Name,job,sal,comm;
+    EXIT when cur%notfound;
+    DBMS_OUTPUT.PUT_LINE('Employee Name:      '||Name);
+    DBMS_OUTPUT.PUT_LINE('Employee Job:       '||job);
+    DBMS_OUTPUT.PUT_LINE('Employee Salary:    '||sal);
+    DBMS_OUTPUT.PUT_LINE('Employee Comission: '||comm);
+    DBMS_OUTPUT.PUT_LINE('********************************');
+END LOOP;
+End;
+execute report(10);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
